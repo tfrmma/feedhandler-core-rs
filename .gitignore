@@ -1,0 +1,24 @@
+/target/
+Cargo.lock
+
+*.profraw
+perf.data
+perf.data.old
+flamegraph.svg
+*.flamegraph.txt
+assets/criterion/
+
+core
+core.*
+*.log
+*.dmp
+
+.env
+.env.*
+! .env.example       
+
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
