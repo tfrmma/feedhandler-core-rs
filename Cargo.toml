@@ -1,0 +1,28 @@
+[package]
+name        = "feedhandler"
+version     = "0.1.0"
+edition     = "2021"
+description = "HFT Normalized Feedhandler Core — zero-alloc, lock-free, bare-metal"
+
+[dependencies]
+# Zero external runtime dependencies — all hot-path code is self-contained.
+
+[dev-dependencies]
+# Requires rustc >= 1.80 (criterion 0.5 depends on half 2.x).
+# On bare-metal targets: `rustup default stable` (>= 1.80) and uncomment:
+# criterion = { version = "0.5", features = ["html_reports"] }
+
+# [[bench]]
+# name    = "latency"
+# harness = false
+
+[profile.release]
+opt-level     = 3
+lto           = "fat"       # whole-program LTO
+codegen-units = 1           # single CGU maximises cross-module inlining
+panic         = "abort"     # strips unwinding infrastructure
+debug         = false
+
+[profile.bench]
+inherits = "release"
+debug    = true             # retain frame pointers for perf(1) / vtune
