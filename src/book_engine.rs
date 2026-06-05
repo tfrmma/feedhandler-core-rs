@@ -1,3 +1,10 @@
+//! @file book_engine.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 use crate::{
     ring_buffer::SpscDisruptor,
     timer,
@@ -15,8 +22,6 @@ pub struct TickStats {
     pub result:        DeltaResult,
     _pad:              [u8; 7],
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 // One engine per instrument per exchange. If you need multi-book routing,
 // spin up multiple engines and let the strategy layer decide which one to query.
@@ -71,7 +76,13 @@ impl BookEngine {
     #[inline(always)] pub fn book_mut(&mut self) -> &mut OrderBook  { &mut self.book }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+//! @file book_engine.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 
 // log2-bucketed histogram, fully stack-allocated. Not pretty but it's
 // good enough for a quick latency triage without pulling in a metrics crate.
@@ -113,7 +124,13 @@ impl<const N: usize> Default for LatencyHistogram<N> {
     fn default() -> Self { Self::new() }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+//! @file book_engine.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 
 #[cfg(test)]
 mod tests {
@@ -243,3 +260,11 @@ mod tests {
         assert_eq!(eng.book().spread(), Some(200));
     }
 }
+
+//! @file book_engine.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
