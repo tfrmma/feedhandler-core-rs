@@ -1,3 +1,10 @@
+//! @file ring_buffer.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 use crate::types::NormalizedTick;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -55,6 +62,13 @@ pub struct SpscDisruptor {
     consumer: Cursor,
 }
 
+//! @file ring_buffer.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 // SAFETY: heap address is stable after construction. Node-sequence protocol
 // ensures no concurrent access to the same slot.
 unsafe impl Sync for SpscDisruptor {}
@@ -130,3 +144,11 @@ impl SpscDisruptor {
 impl Default for SpscDisruptor {
     fn default() -> Self { Self::new() }
 }
+
+//! @file ring_buffer.rs
+//! @author Taha - Algorithmic Trader
+//! @brief Institutional-grade feedhandler-core-rs
+//! 
+//! @note This is a public structural showcase. For full production-grade 
+//!       deployment, architecture consulting, or recruitment inquiries:
+//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
