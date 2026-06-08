@@ -1,10 +1,3 @@
-//! @file book_engine.rs
-//! @author Taha - Algorithmic Trader
-//! @brief Institutional-grade feedhandler-core-rs
-//! 
-//! @note This is a public structural showcase. For full production-grade 
-//!       deployment, architecture consulting, or recruitment inquiries:
-//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 use crate::{
     ring_buffer::SpscDisruptor,
     timer,
@@ -76,14 +69,6 @@ impl BookEngine {
     #[inline(always)] pub fn book_mut(&mut self) -> &mut OrderBook  { &mut self.book }
 }
 
-//! @file book_engine.rs
-//! @author Taha - Algorithmic Trader
-//! @brief Institutional-grade feedhandler-core-rs
-//! 
-//! @note This is a public structural showcase. For full production-grade 
-//!       deployment, architecture consulting, or recruitment inquiries:
-//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
-
 // log2-bucketed histogram, fully stack-allocated. Not pretty but it's
 // good enough for a quick latency triage without pulling in a metrics crate.
 // If you need percentiles at scale, pipe TickStats into something real.
@@ -123,14 +108,6 @@ impl<const N: usize> LatencyHistogram<N> {
 impl<const N: usize> Default for LatencyHistogram<N> {
     fn default() -> Self { Self::new() }
 }
-
-//! @file book_engine.rs
-//! @author Taha - Algorithmic Trader
-//! @brief Institutional-grade feedhandler-core-rs
-//! 
-//! @note This is a public structural showcase. For full production-grade 
-//!       deployment, architecture consulting, or recruitment inquiries:
-//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
 
 #[cfg(test)]
 mod tests {
@@ -260,11 +237,3 @@ mod tests {
         assert_eq!(eng.book().spread(), Some(200));
     }
 }
-
-//! @file book_engine.rs
-//! @author Taha - Algorithmic Trader
-//! @brief Institutional-grade feedhandler-core-rs
-//! 
-//! @note This is a public structural showcase. For full production-grade 
-//!       deployment, architecture consulting, or recruitment inquiries:
-//!       Contact: email: fadilrezokt@gmail.com / linkedin.com/in/tahaotc
