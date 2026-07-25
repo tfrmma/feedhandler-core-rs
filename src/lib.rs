@@ -3,6 +3,7 @@
 
 pub mod book_engine;
 pub mod ring_buffer;
+mod sync;
 pub mod timer;
 pub mod types;
 
