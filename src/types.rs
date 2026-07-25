@@ -24,7 +24,7 @@ impl Qty {
 }
 
 // 16 bytes fits in a 128-bit register, no heap, easy to copy around.
-// Truncates silently if you feed it something longer — don't do that.
+// Truncates silently if you feed it something longer, don't do that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct Symbol([u8; 16]);
@@ -85,7 +85,6 @@ pub struct NormalizedTick {
 const _: () = assert!(mem::size_of::<NormalizedTick>() == 64);
 const _: () = assert!(mem::align_of::<NormalizedTick>() == 64);
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
@@ -101,16 +100,15 @@ impl Level {
 
 const _: () = assert!(mem::size_of::<Level>() == 16);
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 pub const MAX_LEVELS: usize = 64;
 
 // count is on its own cache line so updating it doesn't thrash the levels array.
-// Learned this one the hard way on a 10G feed — saved ~80ns per update.
+// learned this the hard way on a 10G feed, saved ~80ns/update
 //
 // bids: sorted descending. asks: ascending. levels[0] is always best.
 //
-// TODO: consider a hybrid layout — keep top 5 levels in a separate array for
+// TODO: consider a hybrid layout, keep top 5 levels in a separate array for
 // BBO queries that don't need to touch the rest. Premature for now.
 #[repr(C, align(64))]
 pub struct BookSide {
@@ -170,7 +168,7 @@ impl BookSide {
     #[inline(always)]
     fn remove(&mut self, idx: usize) -> DeltaResult {
         let tail = self.count - 1;
-        // ptr::copy is memmove — handles overlap, faster than a loop, compiler knows it too
+        // ptr::copy is memmove, handles overlap, faster than a loop and the compiler knows it
         unsafe {
             let p = self.levels.as_mut_ptr().add(idx);
             std::ptr::copy(p.add(1), p, tail - idx);
@@ -190,7 +188,7 @@ impl BookSide {
             self.count += 1;
             DeltaResult::Inserted
         } else if idx < MAX_LEVELS {
-            // book full but this price beats something we're tracking — evict the worst
+            // book's full but this price beats something we track, evict the worst
             unsafe {
                 let p = self.levels.as_mut_ptr().add(idx);
                 std::ptr::copy(p, p.add(1), MAX_LEVELS - idx - 1);
@@ -220,7 +218,6 @@ pub enum DeltaResult {
     Discarded       = 5,
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 // bids (1088B) | asks (1088B) | metadata (64B) = 2240B total, 35 cache lines.
 // Each side sits on its own cache-line-aligned region. One-sided updates
@@ -247,8 +244,12 @@ impl OrderBook {
             asks:             BookSide::new(),
             sequence:         0,
             last_update_ns:   0,
-            bids_snapshot_id: 0,
-            asks_snapshot_id: 0,
+            // sentinel, not 0. adapters usually start snapshot_id at 0, and 0 used
+            // to be the default here too, so the first real snapshot never cleared
+            // anything. u32::MAX only bites if the very first snapshot happens to
+            // carry that exact id, which isn't going to happen in practice.
+            bids_snapshot_id: u32::MAX,
+            asks_snapshot_id: u32::MAX,
             symbol,
             exchange,
             _meta_pad:        [0u8; 23],
