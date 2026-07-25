@@ -253,4 +253,109 @@ mod tests {
         assert_eq!(eng.book().bids.count, 1);
         assert_eq!(eng.book().bids.levels[0].price.raw(), 100);
     }
+
+    // Regression: the symbol check used to be a bare debug_assert_eq!, which
+    // compiles out entirely in release. A tick for the wrong book used to get
+    // applied anyway with no signal at all. Debug builds still fail loud and
+    // fast (below); release must discard and count it instead of panicking
+    // or, worse, silently applying it to the wrong book.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "wrong book")]
+    fn wrong_symbol_tick_panics_in_debug() {
+        let (mut eng, ring) = make_engine();
+        let wrong_symbol = NormalizedTick {
+            symbol: Symbol::from_bytes(b"ETHUSDT"),
+            ..make_tick(100, 1_0000_0000, Side::Bid, 1)
+        };
+        push(&ring, wrong_symbol);
+        eng.run_batch();
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn wrong_symbol_tick_is_discarded_not_applied() {
+        let (mut eng, ring) = make_engine();
+        let wrong_symbol = NormalizedTick {
+            symbol: Symbol::from_bytes(b"ETHUSDT"),
+            ..make_tick(100, 1_0000_0000, Side::Bid, 1)
+        };
+        push(&ring, wrong_symbol);
+        eng.run_batch();
+
+        assert_eq!(eng.book().bids.count, 0, "wrong-symbol tick must not touch the book");
+        assert_eq!(eng.book().symbol_mismatches, 1);
+    }
+
+    // Regression: spread() clamps a crossed book to 0 via saturating_sub,
+    // which looks identical to a tight, healthy market. is_crossed() is the
+    // dedicated check for the case spread() can't distinguish.
+    #[test]
+    fn crossed_book_detected_separately_from_spread() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(10100, 1_0000_0000, Side::Bid, 1));
+        push(&ring, make_tick(9900, 1_0000_0000, Side::Ask, 2));
+        eng.run_batch();
+
+        assert_eq!(eng.book().spread(), Some(0));
+        assert!(eng.book().is_crossed());
+    }
+
+    #[test]
+    fn tight_book_is_not_crossed() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(9900, 1_0000_0000, Side::Bid, 1));
+        push(&ring, make_tick(10100, 1_0000_0000, Side::Ask, 2));
+        eng.run_batch();
+
+        assert!(!eng.book().is_crossed());
+    }
+
+    // Regression: nothing tracked missed or reordered sequence numbers.
+    // A dropped packet or a stream replaying out of order applied silently.
+    #[test]
+    fn sequence_gap_is_counted() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(100, 1_0000_0000, Side::Bid, 1));
+        push(&ring, make_tick(101, 1_0000_0000, Side::Bid, 5)); // skipped 2,3,4
+        eng.run_batch();
+
+        assert_eq!(eng.book().sequence_gaps, 1);
+        assert_eq!(eng.book().sequence_reorders, 0);
+    }
+
+    #[test]
+    fn out_of_order_sequence_is_counted_as_reorder_not_gap() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(100, 1_0000_0000, Side::Bid, 5));
+        push(&ring, make_tick(101, 1_0000_0000, Side::Bid, 3)); // went backward
+        eng.run_batch();
+
+        assert_eq!(eng.book().sequence_reorders, 1);
+        assert_eq!(eng.book().sequence_gaps, 0);
+    }
+
+    #[test]
+    fn contiguous_sequence_counts_neither() {
+        let (mut eng, ring) = make_engine();
+        for seq in 1..=5u64 {
+            push(&ring, make_tick(100 + seq, 1_0000_0000, Side::Bid, seq));
+        }
+        eng.run_batch();
+
+        assert_eq!(eng.book().sequence_gaps, 0);
+        assert_eq!(eng.book().sequence_reorders, 0);
+    }
+
+    // The very first tick ever applied has nothing to compare against and
+    // must never be miscounted as a gap just because sequence started at 0.
+    #[test]
+    fn first_tick_ever_is_never_a_gap() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(100, 1_0000_0000, Side::Bid, 500));
+        eng.run_batch();
+
+        assert_eq!(eng.book().sequence_gaps, 0);
+        assert_eq!(eng.book().sequence_reorders, 0);
+    }
 }
