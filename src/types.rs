@@ -85,6 +85,32 @@ pub struct NormalizedTick {
 const _: () = assert!(mem::size_of::<NormalizedTick>() == 64);
 const _: () = assert!(mem::align_of::<NormalizedTick>() == 64);
 
+impl NormalizedTick {
+    // _align_pad is crate-private so nothing outside sets it by hand, but
+    // that also means external crates (integration tests, downstream
+    // users) can't build one at all via struct literal, not even with
+    // `..Default::default()`. This is the escape hatch.
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        price: Price,
+        qty: Qty,
+        sequence: u64,
+        ts_exchange_ns: u64,
+        ts_recv_ns: u64,
+        symbol: Symbol,
+        exchange: Exchange,
+        side: Side,
+        is_snapshot: bool,
+        snapshot_id: u32,
+    ) -> Self {
+        NormalizedTick {
+            price, qty, sequence, ts_exchange_ns, ts_recv_ns, symbol, exchange,
+            side, is_snapshot, _align_pad: 0, snapshot_id,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
