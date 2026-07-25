@@ -5,7 +5,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-// Latency sample. Caller owns the arena — we just write into a slot.
+// Latency sample. Caller owns the arena, we just write into a slot.
 // Keep this repr(C) so it's safe to dump directly into a ring buffer or mmap.
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
@@ -18,8 +18,8 @@ pub struct TickStats {
 
 // One engine per instrument per exchange. If you need multi-book routing,
 // spin up multiple engines and let the strategy layer decide which one to query.
-// TODO: add a router layer that fans out one ring to N books keyed by symbol —
-// currently callers have to do that themselves.
+// TODO: add a router layer that fans out one ring to N books keyed by symbol,
+// right now callers have to do that themselves.
 pub struct BookEngine {
     book:       Box<OrderBook>,
     ring:       Arc<SpscDisruptor>,
@@ -141,7 +141,7 @@ mod tests {
     }
 
     fn push(ring: &SpscDisruptor, t: NormalizedTick) {
-        assert!(unsafe { ring.try_publish(t) }, "ring full in test — bump RING_SIZE?");
+        assert!(unsafe { ring.try_publish(t) }, "ring full in test, bump RING_SIZE?");
     }
 
     #[test]
@@ -235,5 +235,22 @@ mod tests {
         push(&ring, make_tick(10100, 1_0000_0000, Side::Ask, 2));
         eng.run_batch();
         assert_eq!(eng.book().spread(), Some(200));
+    }
+
+    // Regression: bids_snapshot_id/asks_snapshot_id used to default to 0, so a
+    // snapshot whose own id happened to be 0 was indistinguishable from "no
+    // snapshot applied yet" and never cleared stale levels.
+    #[test]
+    fn snapshot_id_zero_still_clears_stale_book() {
+        let (mut eng, ring) = make_engine();
+        push(&ring, make_tick(999, 1_0000_0000, Side::Bid, 1));
+        eng.run_batch();
+        assert_eq!(eng.book().bids.count, 1);
+
+        push(&ring, snap_tick(100, 5_0000_0000, Side::Bid, 2, 0));
+        eng.run_batch();
+
+        assert_eq!(eng.book().bids.count, 1);
+        assert_eq!(eng.book().bids.levels[0].price.raw(), 100);
     }
 }
