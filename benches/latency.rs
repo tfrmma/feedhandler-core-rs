@@ -46,8 +46,6 @@ fn seed_asks(book: &mut OrderBook, n: usize) {
     }
 }
 
-// ── Ring buffer ───────────────────────────────────────────────────────────────
-
 fn bench_ring_roundtrip(c: &mut Criterion) {
     let ring = Arc::new(SpscDisruptor::new());
     let t    = delta(100_000_00_000_000, 1_00_000_000, Side::Bid, 1);
@@ -59,8 +57,6 @@ fn bench_ring_roundtrip(c: &mut Criterion) {
         });
     });
 }
-
-// ── Book update ───────────────────────────────────────────────────────────────
 
 fn bench_book_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("book");
@@ -111,8 +107,6 @@ fn bench_book_update(c: &mut Criterion) {
 
     group.finish();
 }
-
-// ── Full pipeline ─────────────────────────────────────────────────────────────
 
 fn bench_pipeline_single(c: &mut Criterion) {
     let ring    = Arc::new(SpscDisruptor::new());
