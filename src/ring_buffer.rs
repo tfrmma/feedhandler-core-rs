@@ -53,6 +53,7 @@ pub struct SpscDisruptor {
     buffer:   Box<[RingBufferNode]>,
     producer: Cursor,
     consumer: Cursor,
+    dropped:  AtomicU64, // ticks lost to a full ring, own cache line not needed, cold path
 }
 
 // SAFETY: heap address is stable after construction. Node-sequence protocol
@@ -75,11 +76,13 @@ impl SpscDisruptor {
             buffer:   buf.into_boxed_slice(),
             producer: Cursor::new(0),
             consumer: Cursor::new(0),
+            dropped:  AtomicU64::new(0),
         }
     }
 
     /// Returns false if the ring is full. Caller decides whether to spin, drop, or panic.
-    /// In production we spin for a few hundred ns then log and drop.
+    /// In production we spin for a few hundred ns then log and drop; every false return
+    /// also lands in `dropped_count()` so the drop is never just a comment's promise.
     ///
     /// # Safety  Single-producer only.
     #[inline(always)]
@@ -89,6 +92,7 @@ impl SpscDisruptor {
 
         // Acquire pairs with the consumer's Release when it freed this slot.
         if node.sequence.load(Ordering::Acquire) != prod {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
             return false;
         }
 
@@ -105,7 +109,7 @@ impl SpscDisruptor {
         let cons = self.consumer.seq.load(Ordering::Relaxed);
         let node = self.buffer.get_unchecked((cons & RING_MASK) as usize);
 
-        // Acquire synchronises with the producer's Release — tick is fully visible now.
+        // Acquire syncs with the producer's Release, tick is fully visible now.
         if node.sequence.load(Ordering::Acquire) != cons.wrapping_add(1) {
             return None;
         }
@@ -123,10 +127,47 @@ impl SpscDisruptor {
             .wrapping_sub(self.consumer.seq.load(Ordering::Relaxed))
     }
 
+    /// Total ticks lost to a full ring since construction. Wire this into
+    /// your metrics loop, silent drops here mean silent gaps in the book.
+    #[inline]
+    pub fn dropped_count(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
+    }
+
     #[inline(always)]
     pub const fn capacity() -> usize { RING_SIZE }
 }
 
 impl Default for SpscDisruptor {
     fn default() -> Self { Self::new() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Exchange, Price, Qty, Side, Symbol};
+
+    fn tick(seq: u64) -> NormalizedTick {
+        NormalizedTick {
+            price: Price::new(1), qty: Qty::new(1), sequence: seq,
+            ts_exchange_ns: 0, ts_recv_ns: 0,
+            symbol: Symbol::from_bytes(b"BTCUSDT"), exchange: Exchange::Binance,
+            side: Side::Bid, is_snapshot: false, _align_pad: 0, snapshot_id: 0,
+        }
+    }
+
+    #[test]
+    fn overflow_increments_dropped_count() {
+        let ring = SpscDisruptor::new();
+        for i in 0..RING_SIZE as u64 {
+            assert!(unsafe { ring.try_publish(tick(i)) });
+        }
+        assert_eq!(ring.dropped_count(), 0);
+
+        assert!(!unsafe { ring.try_publish(tick(9999)) });
+        assert_eq!(ring.dropped_count(), 1);
+
+        assert!(!unsafe { ring.try_publish(tick(9999)) });
+        assert_eq!(ring.dropped_count(), 2);
+    }
 }
