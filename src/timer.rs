@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 static TSC_HZ: AtomicU64 = AtomicU64::new(0);
 
 /// Sleep 100ms, count ticks, cache the ratio. Call once at startup.
-/// Not robust against TSC freq scaling — disable turbo boost / C-states
+/// Not robust against TSC freq scaling, disable turbo boost / C-states
 /// on your trading box or this will drift under load.
 pub fn calibrate() -> u64 {
     let t0 = Instant::now();
@@ -36,7 +36,7 @@ pub fn rdtsc() -> u64 {
     unsafe { core::arch::x86_64::_rdtsc() }
 }
 
-/// Serialising variant — use at the *start* of a measured window to stop
+/// Serialising variant, use at the *start* of a measured window to stop
 /// the CPU from reordering instructions across the measurement boundary.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
