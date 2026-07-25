@@ -1,10 +1,18 @@
+use crate::sync::{AtomicU64, Ordering, UnsafeCell};
 use crate::types::NormalizedTick;
-use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 // 4096 × 128B = 512KB. Fits in L2 on anything built after 2015.
 // If you're running this on a machine where it doesn't fit, you have other problems.
+//
+// Loom explores every thread interleaving, so a 4096-slot ring is a
+// non-starter for the model checker, it'd never finish. Shrink it way
+// down when loom is driving; the protocol under test doesn't care about
+// the size, just the wraparound and the handshake.
+#[cfg(not(loom))]
 pub const RING_SIZE: usize = 1 << 12;
+#[cfg(loom)]
+pub const RING_SIZE: usize = 2;
+
 const RING_MASK: u64 = (RING_SIZE - 1) as u64;
 
 const _: () = assert!(RING_SIZE.is_power_of_two());
@@ -30,6 +38,7 @@ pub struct RingBufferNode {
 unsafe impl Sync for RingBufferNode {}
 unsafe impl Send for RingBufferNode {}
 
+#[cfg(not(loom))]
 const _: () = assert!(std::mem::size_of::<RingBufferNode>() == 128);
 
 // Separate cache lines for producer and consumer cursors.
@@ -41,7 +50,13 @@ struct Cursor {
 }
 
 impl Cursor {
+    #[cfg(not(loom))]
     const fn new(v: u64) -> Self {
+        Cursor { seq: AtomicU64::new(v), _pad: [0u8; 56] }
+    }
+
+    #[cfg(loom)]
+    fn new(v: u64) -> Self {
         Cursor { seq: AtomicU64::new(v), _pad: [0u8; 56] }
     }
 }
@@ -96,7 +111,7 @@ impl SpscDisruptor {
             return false;
         }
 
-        node.tick.get().write(tick);
+        node.tick.with_mut(|p| unsafe { p.write(tick) });
         // Release makes the tick visible before the consumer can read seq == prod+1.
         node.sequence.store(prod.wrapping_add(1), Ordering::Release);
         self.producer.seq.store(prod.wrapping_add(1), Ordering::Relaxed);
@@ -114,7 +129,7 @@ impl SpscDisruptor {
             return None;
         }
 
-        let tick = node.tick.get().read();
+        let tick = node.tick.with(|p| unsafe { p.read() });
         node.sequence.store(cons.wrapping_add(RING_SIZE as u64), Ordering::Release);
         self.consumer.seq.store(cons.wrapping_add(1), Ordering::Relaxed);
         Some(tick)
