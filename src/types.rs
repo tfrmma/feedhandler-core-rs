@@ -245,46 +245,65 @@ pub enum DeltaResult {
 }
 
 
-// bids (1088B) | asks (1088B) | metadata (64B) = 2240B total, 35 cache lines.
+// bids (1088B) | asks (1088B) | metadata (128B) = 2304B total, 36 cache lines.
 // Each side sits on its own cache-line-aligned region. One-sided updates
 // don't touch the other side's lines. This matters at 500k updates/sec.
 #[repr(C, align(64))]
 pub struct OrderBook {
-    pub bids:             BookSide,
-    pub asks:             BookSide,
-    pub sequence:         u64,
-    pub last_update_ns:   u64,
-    pub bids_snapshot_id: u32,
-    pub asks_snapshot_id: u32,
-    pub symbol:           Symbol,
-    pub exchange:         Exchange,
-    _meta_pad:            [u8; 23], // 8+8+4+4+16+1+23 = 64, don't touch
+    pub bids:               BookSide,
+    pub asks:               BookSide,
+    pub sequence:           u64,
+    pub last_update_ns:     u64,
+    // Observability counters, not correctness gates. apply() never rejects
+    // a tick over sequence, resyncing after a gap is the adapter's job.
+    pub symbol_mismatches:  u64,
+    pub sequence_gaps:      u64,
+    pub sequence_reorders:  u64,
+    pub bids_snapshot_id:   u32,
+    pub asks_snapshot_id:   u32,
+    pub symbol:             Symbol,
+    pub exchange:           Exchange,
+    sequence_initialized:   bool,
+    _meta_pad:              [u8; 62], // 8*5+4*2+16+1+1+62 = 128, don't touch
 }
 
-const _: () = assert!(mem::size_of::<OrderBook>() == 2240);
+const _: () = assert!(mem::size_of::<OrderBook>() == 2304);
 
 impl OrderBook {
     pub fn new(symbol: Symbol, exchange: Exchange) -> Box<Self> {
         Box::new(OrderBook {
-            bids:             BookSide::new(),
-            asks:             BookSide::new(),
-            sequence:         0,
-            last_update_ns:   0,
+            bids:                 BookSide::new(),
+            asks:                 BookSide::new(),
+            sequence:             0,
+            last_update_ns:       0,
             // sentinel, not 0. adapters usually start snapshot_id at 0, and 0 used
             // to be the default here too, so the first real snapshot never cleared
             // anything. u32::MAX only bites if the very first snapshot happens to
             // carry that exact id, which isn't going to happen in practice.
-            bids_snapshot_id: u32::MAX,
-            asks_snapshot_id: u32::MAX,
+            bids_snapshot_id:     u32::MAX,
+            asks_snapshot_id:     u32::MAX,
             symbol,
             exchange,
-            _meta_pad:        [0u8; 23],
+            symbol_mismatches:    0,
+            sequence_gaps:        0,
+            sequence_reorders:    0,
+            sequence_initialized: false,
+            _meta_pad:            [0u8; 62],
         })
     }
 
     #[inline(always)]
     pub fn apply(&mut self, tick: &NormalizedTick) -> DeltaResult {
-        debug_assert_eq!(tick.symbol, self.symbol, "wrong book, fix your router");
+        // debug_assert alone used to be the only check here, which means it
+        // compiled out entirely in release, exactly the build that runs in
+        // prod. A router bug would silently merge one symbol's ticks into
+        // another book. Now release still discards and counts it instead of
+        // corrupting the book; debug keeps failing loud and immediate.
+        if tick.symbol != self.symbol {
+            debug_assert!(false, "wrong book, fix your router");
+            self.symbol_mismatches += 1;
+            return DeltaResult::Discarded;
+        }
 
         if tick.is_snapshot {
             self.maybe_clear_for_snapshot(tick.side, tick.snapshot_id);
@@ -296,11 +315,31 @@ impl OrderBook {
         };
 
         if !matches!(result, DeltaResult::NoOp | DeltaResult::Discarded) {
-            self.sequence = tick.sequence;
+            self.track_sequence(tick.sequence);
             self.last_update_ns = tick.ts_recv_ns;
         }
 
         result
+    }
+
+    // Counts gaps (missed packets) and reorders (duplicate or out-of-order)
+    // separately. Doesn't reject either, resync is somebody else's problem,
+    // this just makes sure it's visible instead of silently absorbed. First
+    // tick after construction never counts, there's nothing to compare yet.
+    #[inline(always)]
+    fn track_sequence(&mut self, seq: u64) {
+        if self.sequence_initialized {
+            if seq > self.sequence {
+                if seq != self.sequence + 1 {
+                    self.sequence_gaps += 1;
+                }
+            } else {
+                self.sequence_reorders += 1;
+            }
+        } else {
+            self.sequence_initialized = true;
+        }
+        self.sequence = seq;
     }
 
     // Only clears on the first tick of a new snapshot batch. Every tick in
@@ -325,5 +364,18 @@ impl OrderBook {
         let bid = self.bids.best()?.price.0;
         let ask = self.asks.best()?.price.0;
         Some(ask.saturating_sub(bid))
+    }
+
+    /// True when the best bid trades through the best ask. saturating_sub in
+    /// spread() clamps that case to 0, which reads the same as "tight
+    /// market" unless you check here too. Bad snapshot, partial state
+    /// mid-reconnect, race between two update streams, whatever the cause,
+    /// this is the thing you actually want an alert on.
+    #[inline(always)]
+    pub fn is_crossed(&self) -> bool {
+        match (self.bids.best(), self.asks.best()) {
+            (Some(bid), Some(ask)) => bid.price.0 > ask.price.0,
+            _ => false,
+        }
     }
 }
