@@ -259,12 +259,13 @@ pub struct OrderBook {
     pub symbol_mismatches:  u64,
     pub sequence_gaps:      u64,
     pub sequence_reorders:  u64,
+    pub checksum_failures:  u64,
     pub bids_snapshot_id:   u32,
     pub asks_snapshot_id:   u32,
     pub symbol:             Symbol,
     pub exchange:           Exchange,
     sequence_initialized:   bool,
-    _meta_pad:              [u8; 62], // 8*5+4*2+16+1+1+62 = 128, don't touch
+    _meta_pad:              [u8; 54], // 8*6+4*2+16+1+1+54 = 128, don't touch
 }
 
 const _: () = assert!(mem::size_of::<OrderBook>() == 2304);
@@ -287,8 +288,9 @@ impl OrderBook {
             symbol_mismatches:    0,
             sequence_gaps:        0,
             sequence_reorders:    0,
+            checksum_failures:    0,
             sequence_initialized: false,
-            _meta_pad:            [0u8; 62],
+            _meta_pad:            [0u8; 54],
         })
     }
 
@@ -377,5 +379,38 @@ impl OrderBook {
             (Some(bid), Some(ask)) => bid.price.0 > ask.price.0,
             _ => false,
         }
+    }
+
+    /// True if nothing has updated this book within `threshold_ns` of
+    /// `now_ns`. A book that's never been touched (last_update_ns == 0)
+    /// falls out of this naturally, `now_ns` will be far past any sane
+    /// threshold. `now_ns` needs to be the same clock domain as the
+    /// ts_recv_ns your adapter stamps ticks with.
+    #[inline(always)]
+    pub fn is_stale(&self, now_ns: u64, threshold_ns: u64) -> bool {
+        now_ns.saturating_sub(self.last_update_ns) > threshold_ns
+    }
+
+    /// Feeds (side, price, qty) for the top `n` levels per side to `f`, best
+    /// price first, same order the book already stores them in. This is as
+    /// far as this crate goes toward checksum validation: Bybit and OKX ship
+    /// a checksum with their L2 deltas, but the concatenation format and the
+    /// CRC32 seed are exchange-specific and undocumented here, so that math
+    /// belongs at the adapter layer, not guessed at in this crate. Once your
+    /// adapter has verified (or failed) the checksum, call
+    /// `record_checksum_failure()` to keep the result with the book's other
+    /// health counters instead of scattered across adapter code.
+    pub fn for_checksum<F: FnMut(Side, Price, Qty)>(&self, n: usize, mut f: F) {
+        for lvl in self.bids.levels.iter().take(n.min(self.bids.count)) {
+            f(Side::Bid, lvl.price, lvl.qty);
+        }
+        for lvl in self.asks.levels.iter().take(n.min(self.asks.count)) {
+            f(Side::Ask, lvl.price, lvl.qty);
+        }
+    }
+
+    #[inline(always)]
+    pub fn record_checksum_failure(&mut self) {
+        self.checksum_failures += 1;
     }
 }
