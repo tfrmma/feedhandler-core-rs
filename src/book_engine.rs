@@ -358,4 +358,59 @@ mod tests {
         assert_eq!(eng.book().sequence_gaps, 0);
         assert_eq!(eng.book().sequence_reorders, 0);
     }
+
+    #[test]
+    fn fresh_update_is_not_stale() {
+        let (mut eng, ring) = make_engine();
+        let t = NormalizedTick { ts_recv_ns: 1_000_000_000, ..make_tick(100, 1_0000_0000, Side::Bid, 1) };
+        push(&ring, t);
+        eng.run_batch();
+
+        assert!(!eng.book().is_stale(1_000_000_500, 1_000)); // 500ns later, well under a 1us threshold
+    }
+
+    #[test]
+    fn book_past_threshold_is_stale() {
+        let (mut eng, ring) = make_engine();
+        let t = NormalizedTick { ts_recv_ns: 1_000_000_000, ..make_tick(100, 1_0000_0000, Side::Bid, 1) };
+        push(&ring, t);
+        eng.run_batch();
+
+        assert!(eng.book().is_stale(2_000_000_000, 1_000)); // 1 full second later, way past a 1us threshold
+    }
+
+    #[test]
+    fn never_updated_book_is_stale() {
+        let book = OrderBook::new(Symbol::from_bytes(b"BTCUSDT"), Exchange::Binance);
+        assert!(book.is_stale(1_000_000_000, 1_000));
+    }
+
+    #[test]
+    fn for_checksum_yields_levels_best_first_bids_then_asks() {
+        let (mut eng, ring) = make_engine();
+        for (p, s) in [(99u64, 1u64), (101, 2), (100, 3)] {
+            push(&ring, make_tick(p, 1_0000_0000, Side::Bid, s));
+        }
+        for (p, s) in [(103u64, 4u64), (102, 5)] {
+            push(&ring, make_tick(p, 1_0000_0000, Side::Ask, s));
+        }
+        eng.run_batch();
+
+        let mut seen = Vec::new();
+        eng.book().for_checksum(2, |side, price, _qty| seen.push((side, price.raw())));
+
+        assert_eq!(seen, vec![
+            (Side::Bid, 101), (Side::Bid, 100), // top 2 bids, best first, third excluded
+            (Side::Ask, 102), (Side::Ask, 103), // top 2 asks, best first
+        ]);
+    }
+
+    #[test]
+    fn checksum_failure_is_counted() {
+        let mut book = OrderBook::new(Symbol::from_bytes(b"BTCUSDT"), Exchange::Binance);
+        assert_eq!(book.checksum_failures, 0);
+        book.record_checksum_failure();
+        book.record_checksum_failure();
+        assert_eq!(book.checksum_failures, 2);
+    }
 }
