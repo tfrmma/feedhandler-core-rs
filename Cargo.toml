@@ -2,10 +2,10 @@
 name        = "feedhandler"
 version     = "0.1.0"
 edition     = "2021"
-description = "HFT Normalized Feedhandler Core — zero-alloc, lock-free, bare-metal"
+description = "HFT Normalized Feedhandler Core, zero-alloc, lock-free, bare-metal"
 
 [dependencies]
-# Zero external runtime dependencies — all hot-path code is self-contained.
+# Zero external runtime dependencies, all hot-path code is self-contained.
 
 [dev-dependencies]
 # Requires rustc >= 1.80 (criterion 0.5 depends on half 2.x).
@@ -16,6 +16,11 @@ description = "HFT Normalized Feedhandler Core — zero-alloc, lock-free, bare-m
 # name    = "latency"
 # harness = false
 
+# loom only compiles in when running the loom model checker, see
+# tests/loom_ring_buffer.rs and RUSTFLAGS="--cfg loom" in the README.
+[target.'cfg(loom)'.dependencies]
+loom = "0.7"
+
 [profile.release]
 opt-level     = 3
 lto           = "fat"       # whole-program LTO
@@ -25,4 +30,4 @@ debug         = false
 
 [profile.bench]
 inherits = "release"
-debug    = true             # retain frame pointers for perf(1) / vtune
+debug    = true             # retain frame pointers for perf(1) / vtun
