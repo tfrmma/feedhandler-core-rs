@@ -69,6 +69,18 @@ pub struct SpscDisruptor {
     producer: Cursor,
     consumer: Cursor,
     dropped:  AtomicU64, // ticks lost to a full ring, own cache line not needed, cold path
+    // Debug-only canaries. This type's whole contract is "exactly one
+    // producer thread, exactly one consumer thread, forever", but nothing
+    // about the type system enforces that, calling try_publish from two
+    // threads compiles fine and just quietly corrupts the ring. These catch
+    // that in dev instead of leaving it for someone to find as a flaky prod
+    // incident. Skipped under loom, loom already exhaustively checks the
+    // real interleavings and an untracked Mutex here would just confuse its
+    // model.
+    #[cfg(all(debug_assertions, not(loom)))]
+    producer_thread: std::sync::Mutex<Option<std::thread::ThreadId>>,
+    #[cfg(all(debug_assertions, not(loom)))]
+    consumer_thread: std::sync::Mutex<Option<std::thread::ThreadId>>,
 }
 
 // SAFETY: heap address is stable after construction. Node-sequence protocol
@@ -92,6 +104,30 @@ impl SpscDisruptor {
             producer: Cursor::new(0),
             consumer: Cursor::new(0),
             dropped:  AtomicU64::new(0),
+            #[cfg(all(debug_assertions, not(loom)))]
+            producer_thread: std::sync::Mutex::new(None),
+            #[cfg(all(debug_assertions, not(loom)))]
+            consumer_thread: std::sync::Mutex::new(None),
+        }
+    }
+
+    // First caller "claims" the role and every later call is checked against
+    // that. A poisoned mutex (a prior call already panicked) re-panics here
+    // too rather than silently passing, one violation shouldn't hide the next.
+    #[cfg(all(debug_assertions, not(loom)))]
+    fn check_single_thread(
+        slot: &std::sync::Mutex<Option<std::thread::ThreadId>>,
+        role: &str,
+    ) {
+        let current = std::thread::current().id();
+        let mut claimed = slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let owner = *claimed;
+        match owner {
+            Some(id) => assert_eq!(
+                id, current,
+                "SpscDisruptor: {role} called from a second thread, this type is single-{role} only"
+            ),
+            None => *claimed = Some(current),
         }
     }
 
@@ -103,6 +139,9 @@ impl SpscDisruptor {
     /// Single-producer only.
     #[inline(always)]
     pub unsafe fn try_publish(&self, tick: NormalizedTick) -> bool {
+        #[cfg(all(debug_assertions, not(loom)))]
+        Self::check_single_thread(&self.producer_thread, "producer");
+
         let prod = self.producer.seq.load(Ordering::Relaxed);
         let node = self.buffer.get_unchecked((prod & RING_MASK) as usize);
 
@@ -123,6 +162,9 @@ impl SpscDisruptor {
     /// Single-consumer only.
     #[inline(always)]
     pub unsafe fn try_consume(&self) -> Option<NormalizedTick> {
+        #[cfg(all(debug_assertions, not(loom)))]
+        Self::check_single_thread(&self.consumer_thread, "consumer");
+
         let cons = self.consumer.seq.load(Ordering::Relaxed);
         let node = self.buffer.get_unchecked((cons & RING_MASK) as usize);
 
@@ -186,5 +228,25 @@ mod tests {
 
         assert!(!unsafe { ring.try_publish(tick(9999)) });
         assert_eq!(ring.dropped_count(), 2);
+    }
+
+    // Regression: nothing used to stop try_publish from being called by two
+    // different threads, it would just quietly corrupt the ring instead of
+    // telling you your caller violated the single-producer contract. Only
+    // meaningful in debug, not loom: release strips the canary entirely
+    // (zero cost, as documented), and loom already exhaustively checks
+    // legal interleavings on its own so this test doesn't apply there.
+    #[test]
+    #[cfg(all(debug_assertions, not(loom)))]
+    fn cross_thread_publish_is_caught_by_the_canary() {
+        use std::sync::Arc;
+
+        let ring = Arc::new(SpscDisruptor::new());
+        assert!(unsafe { ring.try_publish(tick(0)) }); // claims the producer role on this thread
+
+        let ring2 = Arc::clone(&ring);
+        let result = std::thread::spawn(move || unsafe { ring2.try_publish(tick(1)) }).join();
+
+        assert!(result.is_err(), "a second producer thread must panic, not silently succeed");
     }
 }
