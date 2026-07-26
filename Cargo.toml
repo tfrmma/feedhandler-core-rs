@@ -2,7 +2,7 @@
 name        = "feedhandler"
 version     = "0.1.0"
 edition     = "2021"
-description = "HFT Normalized Feedhandler Core, zero-alloc, lock-free, bare-metal"
+description = "HFT normalized feedhandler core: zero-alloc hot path, lock-free SPSC pipeline. Uses std, not no_std."
 # Cargo auto-discovers anything under benches/ as a bench target by default,
 # which would try to build latency.rs (and fail on the unresolved criterion
 # import) on every `cargo build`/`cargo test`/`cargo clippy`, criterion is
