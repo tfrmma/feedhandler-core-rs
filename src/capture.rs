@@ -51,7 +51,7 @@ impl TickRecorder {
         // uninitialized memory. It's Copy, so nothing here can be
         // double-freed or left in a moved-from state either.
         let bytes = unsafe {
-            std::slice::from_raw_parts((tick as *const NormalizedTick).cast::<u8>(), TICK_SIZE)
+            std::slice::from_raw_parts(std::ptr::from_ref(tick).cast::<u8>(), TICK_SIZE)
         };
         self.out.write_all(bytes)
     }
@@ -95,7 +95,7 @@ impl Iterator for TickReader {
                         break;
                     }
                 }
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Some(Err(e)),
             }
         }
