@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --all-targets
+      - run: cargo test
+
+  clippy:
+    name: clippy (-D warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      # --all-targets so tests/ and benches/ get linted too, not just src/.
+      # lib.rs already carries #![warn(clippy::pedantic, clippy::nursery)],
+      # this just makes CI actually fail the build instead of printing
+      # warnings nobody reads.
+      - run: cargo clippy --all-targets -- -D warnings
+
+  loom:
+    name: loom (concurrency model check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # release, the model checker is slow enough without debug overhead on
+      # top; RING_SIZE is already shrunk under --cfg loom (see
+      # src/ring_buffer.rs) so this stays fast even exhaustive.
+      - run: RUSTFLAGS="--cfg loom" cargo test --release --test loom_ring_buffer
+
+  proptest:
+    name: property tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --test proptest_book_side
