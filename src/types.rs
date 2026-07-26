@@ -84,7 +84,7 @@ pub enum Side {
 //
 // TODO: snapshot_id is u32 and will wrap at ~4B snapshots. In practice that's
 // years of runtime, but worth revisiting if we ever replay historical data fast.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(C, align(64))]
 pub struct NormalizedTick {
     pub price:          Price,
