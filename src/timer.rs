@@ -36,8 +36,11 @@ pub fn rdtsc() -> u64 {
     unsafe { core::arch::x86_64::_rdtsc() }
 }
 
-/// Serialising variant, use at the *start* of a measured window to stop
-/// the CPU from reordering instructions across the measurement boundary.
+/// Serialising variant. RDTSCP waits for every prior instruction to retire
+/// before reading the counter, but doesn't stop later instructions from
+/// being reordered ahead of it, so it belongs at the *end* of a measured
+/// window, not the start. For the start, pair a plain `rdtsc()` with a
+/// preceding `CPUID` or `LFENCE` instead.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn rdtscp() -> u64 {
