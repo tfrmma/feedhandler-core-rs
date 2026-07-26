@@ -99,7 +99,8 @@ impl SpscDisruptor {
     /// In production we spin for a few hundred ns then log and drop; every false return
     /// also lands in `dropped_count()` so the drop is never just a comment's promise.
     ///
-    /// # Safety  Single-producer only.
+    /// # Safety
+    /// Single-producer only.
     #[inline(always)]
     pub unsafe fn try_publish(&self, tick: NormalizedTick) -> bool {
         let prod = self.producer.seq.load(Ordering::Relaxed);
@@ -118,7 +119,8 @@ impl SpscDisruptor {
         true
     }
 
-    /// # Safety  Single-consumer only.
+    /// # Safety
+    /// Single-consumer only.
     #[inline(always)]
     pub unsafe fn try_consume(&self) -> Option<NormalizedTick> {
         let cons = self.consumer.seq.load(Ordering::Relaxed);
