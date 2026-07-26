@@ -3,6 +3,12 @@ name        = "feedhandler"
 version     = "0.1.0"
 edition     = "2021"
 description = "HFT Normalized Feedhandler Core, zero-alloc, lock-free, bare-metal"
+# Cargo auto-discovers anything under benches/ as a bench target by default,
+# which would try to build latency.rs (and fail on the unresolved criterion
+# import) on every `cargo build`/`cargo test`/`cargo clippy`, criterion is
+# opt-in below. Off until you uncomment the dev-dependency and [[bench]]
+# entry together.
+autobenches = false
 
 [dependencies]
 # Zero external runtime dependencies, all hot-path code is self-contained.
@@ -11,6 +17,7 @@ description = "HFT Normalized Feedhandler Core, zero-alloc, lock-free, bare-meta
 # Requires rustc >= 1.80 (criterion 0.5 depends on half 2.x).
 # On bare-metal targets: `rustup default stable` (>= 1.80) and uncomment:
 # criterion = { version = "0.5", features = ["html_reports"] }
+proptest = { version = "=1.4.0", default-features = false, features = ["std"] }
 
 # [[bench]]
 # name    = "latency"
@@ -30,4 +37,4 @@ debug         = false
 
 [profile.bench]
 inherits = "release"
-debug    = true             # retain frame pointers for perf(1) / vtun
+debug    = true             # retain frame pointers for perf(1) / vtune
