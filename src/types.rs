@@ -386,7 +386,7 @@ impl OrderBook {
         Some(ask.saturating_sub(bid))
     }
 
-    /// True when the best bid trades through the best ask. saturating_sub in
+    /// True when the best bid trades through the best ask. `saturating_sub` in
     /// spread() clamps that case to 0, which reads the same as "tight
     /// market" unless you check here too. Bad snapshot, partial state
     /// mid-reconnect, race between two update streams, whatever the cause,
@@ -400,10 +400,10 @@ impl OrderBook {
     }
 
     /// True if nothing has updated this book within `threshold_ns` of
-    /// `now_ns`. A book that's never been touched (last_update_ns == 0)
+    /// `now_ns`. A book that's never been touched (`last_update_ns` == 0)
     /// falls out of this naturally, `now_ns` will be far past any sane
     /// threshold. `now_ns` needs to be the same clock domain as the
-    /// ts_recv_ns your adapter stamps ticks with.
+    /// `ts_recv_ns` your adapter stamps ticks with.
     #[inline(always)]
     pub fn is_stale(&self, now_ns: u64, threshold_ns: u64) -> bool {
         now_ns.saturating_sub(self.last_update_ns) > threshold_ns
