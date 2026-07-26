@@ -33,6 +33,7 @@
 )]
 
 pub mod book_engine;
+pub mod capture;
 pub mod metrics;
 pub mod ring_buffer;
 mod sync;
