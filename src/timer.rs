@@ -41,8 +41,8 @@ pub fn rdtsc() -> u64 {
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn rdtscp() -> u64 {
-    let mut _aux = 0u32;
-    unsafe { core::arch::x86_64::__rdtscp(&mut _aux) }
+    let mut aux = 0u32;
+    unsafe { core::arch::x86_64::__rdtscp(&raw mut aux) }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
