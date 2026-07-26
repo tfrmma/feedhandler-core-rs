@@ -10,6 +10,13 @@ description = "HFT Normalized Feedhandler Core, zero-alloc, lock-free, bare-meta
 # entry together.
 autobenches = false
 
+[lints.rust]
+# `loom` is a real cfg used throughout src/sync.rs and src/ring_buffer.rs for
+# the loom model-checker build (see tests/loom_ring_buffer.rs). Newer rustc
+# warns on any cfg it doesn't recognize by default; this tells it loom is
+# intentional, not a typo'd feature flag.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(loom)"] }
+
 [dependencies]
 # Zero external runtime dependencies, all hot-path code is self-contained.
 
