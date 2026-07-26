@@ -38,6 +38,14 @@ impl Symbol {
 
     #[inline(always)]
     pub fn as_bytes(&self) -> &[u8; 16] { &self.0 }
+
+    /// Trailing NULs trimmed, lossy on anything that isn't valid UTF-8.
+    /// For labels and logging only, never round-trip this back into a
+    /// Symbol.
+    pub fn as_str(&self) -> &str {
+        let end = self.0.iter().position(|&b| b == 0).unwrap_or(self.0.len());
+        std::str::from_utf8(&self.0[..end]).unwrap_or("<invalid-symbol>")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -47,6 +55,16 @@ pub enum Exchange {
     Binance     = 0,
     Bybit       = 1,
     Hyperliquid = 2,
+}
+
+impl Exchange {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Exchange::Binance     => "binance",
+            Exchange::Bybit       => "bybit",
+            Exchange::Hyperliquid => "hyperliquid",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
