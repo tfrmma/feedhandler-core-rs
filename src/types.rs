@@ -387,7 +387,7 @@ impl OrderBook {
     }
 
     /// True when the best bid trades through the best ask. `saturating_sub` in
-    /// spread() clamps that case to 0, which reads the same as "tight
+    /// `spread()` clamps that case to 0, which reads the same as "tight
     /// market" unless you check here too. Bad snapshot, partial state
     /// mid-reconnect, race between two update streams, whatever the cause,
     /// this is the thing you actually want an alert on.
