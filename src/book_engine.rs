@@ -16,6 +16,8 @@ pub struct TickStats {
     _pad:              [u8; 7],
 }
 
+const _: () = assert!(std::mem::size_of::<TickStats>() == 24);
+
 // One engine per instrument per exchange. If you need multi-book routing,
 // spin up multiple engines and let the strategy layer decide which one to query.
 // TODO: add a router layer that fans out one ring to N books keyed by symbol,
