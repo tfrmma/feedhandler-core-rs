@@ -37,7 +37,7 @@ impl BookEngine {
     pub fn run_one(&mut self, stats_out: Option<&mut TickStats>) -> Option<DeltaResult> {
         let tick: NormalizedTick = unsafe { self.ring.try_consume() }?; // SAFETY: single-consumer
 
-        let t0 = stats_out.as_ref().map(|_| timer::rdtsc()).unwrap_or(0);
+        let t0 = stats_out.as_ref().map_or(0, |_| timer::rdtsc());
         let result = self.book.apply(&tick);
 
         if let Some(slot) = stats_out {
